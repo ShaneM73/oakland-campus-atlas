@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive 3D atlas of Oakland, Pittsburgh: the University of Pittsburgh and Carnegie Mellon University.">
+<title>Oakland Campus Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one-screen atlas. The 3D OpenStreetMap model of Oakland is the stage (left); a chapter panel (right) drives the camera. Pitt and CMU colors are semantic, the chrome stays neutral ink. */
+:root{
+  --bg:#f3f3f1; --surface:#fdfdfc; --ink:#1b1d22; --muted:#5f6470; --line:#dfe0e2;
+  --accent-fill:#1d2230; --on-accent:#ffffff;
+  --pitt:#003594; --pitt-text:#003594; --pitt-gold:#ffb81c; --pitt-soft:#dfe5f2;
+  --cmu:#c41230; --cmu-text:#b0102b; --cmu-soft:#f6dfe2;
+  --neutral-soft:#e6e7ea;
+  --stage:#e8e6e1; --pin:#1d2230;
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --panel-w:470px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121317; --surface:#1a1c21; --ink:#eceef2; --muted:#a3a8b3; --line:#30333b;
+  --accent-fill:#e9ebf0; --on-accent:#14161b;
+  --pitt:#2f5fc4; --pitt-text:#8fb0f5; --pitt-soft:#1f2a44;
+  --cmu:#d8344f; --cmu-text:#f08595; --cmu-soft:#3d2026;
+  --neutral-soft:#2a2d34;
+  --stage:#17181c; --pin:#e9ebf0; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121317; --surface:#1a1c21; --ink:#eceef2; --muted:#a3a8b3; --line:#30333b;
+  --accent-fill:#e9ebf0; --on-accent:#14161b;
+  --pitt:#2f5fc4; --pitt-text:#8fb0f5; --pitt-soft:#1f2a44;
+  --cmu:#d8344f; --cmu-text:#f08595; --cmu-soft:#3d2026;
+  --neutral-soft:#2a2d34;
+  --stage:#17181c; --pin:#e9ebf0; color-scheme:dark}
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55;overflow:hidden}
+*{box-sizing:border-box}
+a{color:inherit}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--pitt-text);outline-offset:2px}
+
+.app{display:grid;grid-template-columns:minmax(0,1fr) var(--panel-w);height:100%}
+.stage{position:relative;background:var(--stage);overflow:hidden;min-width:0}
+.stage canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.stage-top{position:absolute;top:max(14px,env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));right:16px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;pointer-events:none}
+.brand{pointer-events:auto;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);padding:6px 12px 6px 6px;border-radius:3px}
+.brand-mark{display:flex;height:30px;border-radius:2px;overflow:hidden}
+.brand-mark i{width:10px;height:100%}
+.brand-mark i:nth-child(1){background:var(--pitt)}.brand-mark i:nth-child(2){background:var(--pitt-gold)}.brand-mark i:nth-child(3){background:var(--cmu)}
+.brand-text{font-family:var(--f-display);font-weight:600;font-size:15px;letter-spacing:.06em;text-transform:uppercase;line-height:1.05}
+.brand-text small{display:block;font-family:var(--f-mono);font-weight:400;font-size:10.5px;letter-spacing:0;text-transform:none;color:var(--muted)}
+.stage-tools{pointer-events:auto;display:flex;gap:6px}
+.tool{background:var(--surface);border:1px solid var(--line);border-radius:3px;height:34px;padding:0 10px;font-size:12.5px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px}
+.tool:hover{border-color:var(--muted)}
+.tool[aria-pressed="true"]{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--on-accent)}
+.legend{position:absolute;left:max(16px,env(safe-area-inset-left,0px));top:66px;background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:8px 10px;display:flex;flex-direction:column;gap:4px;font-size:12px;pointer-events:none}
+.legend span{display:flex;align-items:center;gap:7px}
+.legend i{width:11px;height:11px;border-radius:2px;display:inline-block}
+.compass{position:absolute;right:16px;bottom:max(16px,env(safe-area-inset-bottom,0px));width:52px;height:52px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:grid;place-items:center;cursor:pointer}
+.compass svg{width:40px;height:40px}
+.stage-foot{position:absolute;left:max(16px,env(safe-area-inset-left,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));right:84px;font-family:var(--f-mono);font-size:11px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px}
+.stage-foot b{font-weight:500;color:var(--ink)}
+.stage-foot a{color:var(--muted)}
+.loader{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.loader-box{background:var(--surface);border:1px solid var(--line);padding:14px 18px;border-radius:3px;min-width:220px;max-width:340px}
+.loader-label{font-family:var(--f-mono);font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:10px}
+.loader-bar{height:3px;background:var(--line);margin-top:8px}
+.loader-bar i{display:block;height:100%;width:0;background:var(--pitt);transition:width .2s}
+
+.pins{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.pin{position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;pointer-events:auto;cursor:pointer;transition:opacity .25s;--c:var(--pin)}
+.pin.pitt{--c:var(--pitt)}.pin.cmu{--c:var(--cmu)}
+.pin-label{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--c);padding:3px 8px 3px 7px;font-size:12px;font-weight:600;white-space:nowrap;line-height:1.25;border-radius:2px}
+.pin-label small{display:block;font-family:var(--f-mono);font-weight:400;font-size:10px;color:var(--muted)}
+.pin-stem{width:1.5px;height:22px;background:var(--c)}
+.pin-dot{width:7px;height:7px;border-radius:50%;background:var(--c);margin-top:-1px}
+.pin.is-active .pin-label{background:var(--c);color:#fff;border-color:var(--c)}
+.pin.is-active .pin-label small{color:#fff;opacity:.85}
+.pin.is-region .pin-label{font-family:var(--f-display);font-size:14px;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:4px 8px;border-radius:2px;white-space:nowrap;transform:translate(12px,12px)}
+.tip small{font-family:var(--f-mono);opacity:.75;margin-left:6px}
+
+.panel{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--surface);border-left:1px solid var(--line)}
+.chapters{display:flex;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px);padding-right:max(0px,env(safe-area-inset-right,0px))}
+.chapters button{flex:1 0 auto;background:none;border:0;border-bottom:3px solid transparent;padding:14px 6px 11px;font-family:var(--f-display);font-weight:600;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);cursor:pointer}
+.chapters button:hover{color:var(--ink)}
+.chapters button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.chapter-wrap{flex:1;overflow-y:auto;min-height:0;overscroll-behavior:contain}
+.chapter{padding-block:26px 30px;padding-left:max(26px,env(safe-area-inset-left,0px));padding-right:max(26px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:20px}
+.eyebrow{font-family:var(--f-mono);font-size:11.5px;color:var(--muted)}
+h1,h2{font-family:var(--f-display);font-weight:700;line-height:.98;margin:0;text-wrap:balance;text-transform:uppercase}
+h1{font-size:clamp(44px,5.2vw,62px)}
+h1 .p{color:var(--pitt-text)} h1 .c{color:var(--cmu-text)}
+h2{font-size:38px}
+h3{font-family:var(--f-display);font-weight:600;font-size:17px;letter-spacing:.07em;text-transform:uppercase;margin:0;color:var(--muted)}
+.lead{font-size:16px;margin:0;max-width:62ch}
+p{margin:0}
+.hint{font-size:12.5px;color:var(--muted);display:flex;gap:6px 14px;flex-wrap:wrap}
+.hint kbd{font-family:var(--f-mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;padding:0 5px;border-radius:3px}
+
+.versus{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1fr) minmax(0,1fr);border-top:1px solid var(--line)}
+.versus>div{padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px;line-height:1.35;min-width:0}
+.versus>div:nth-child(3n+2),.versus>div:nth-child(3n){padding-left:12px}
+.versus .vh{font-family:var(--f-display);font-weight:700;font-size:17px;letter-spacing:.05em;text-transform:uppercase;border-bottom:3px solid}
+.versus .vh.p{color:var(--pitt-text);border-bottom-color:var(--pitt)} .versus .vh.c{color:var(--cmu-text);border-bottom-color:var(--cmu)}
+.versus .k{font-family:var(--f-mono);font-size:11px;color:var(--muted);padding-top:11px}
+.versus .vk{border-bottom:3px solid transparent}
+.versus b{font-weight:600}
+.versus small{display:block;font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+
+.figures{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.figures>div{padding:14px 12px 12px 0;display:flex;flex-direction:column;gap:2px;min-width:0}
+.figures>div+div{padding-left:14px;border-left:1px solid var(--line)}
+.fig-n{font-family:var(--f-display);font-weight:700;font-size:38px;line-height:1;font-variant-numeric:tabular-nums}
+.fig-n.p{color:var(--pitt-text)} .fig-n.c{color:var(--cmu-text)}
+.fig-l{font-size:12.5px;color:var(--muted);line-height:1.35}
+
+.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.facts>div{background:var(--surface);padding:12px 14px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.facts .k{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.facts .v{font-weight:600;line-height:1.3}
+
+.filter{display:flex;gap:6px;flex-wrap:wrap}
+.filter button{border:1px solid var(--line);background:none;border-radius:20px;padding:4px 12px;font-size:12.5px;cursor:pointer}
+.filter button[aria-pressed="true"]{background:var(--accent-fill);color:var(--on-accent);border-color:var(--accent-fill)}
+.list{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.row{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:12px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--line);text-align:left;background:none;border-left:0;border-right:0;border-top:0;width:100%}
+button.row{cursor:pointer}
+button.row:hover .row-title{text-decoration:underline;text-underline-offset:3px}
+.row.is-active{background:color-mix(in srgb,var(--ink) 6%,transparent);box-shadow:inset 3px 0 0 var(--ink);padding-left:10px;grid-template-columns:52px minmax(0,1fr) auto}
+.row.pitt.is-active{box-shadow:inset 3px 0 0 var(--pitt)} .row.cmu.is-active{box-shadow:inset 3px 0 0 var(--cmu)}
+.row-year{font-family:var(--f-display);font-weight:700;font-size:21px;line-height:1;font-variant-numeric:tabular-nums}
+.row-title{font-weight:600;line-height:1.3}
+.row-sub{display:block;font-size:13px;color:var(--muted);font-weight:400;margin-top:2px}
+.chip{font-family:var(--f-mono);font-size:10.5px;padding:1px 6px;border-radius:2px;white-space:nowrap;border:1px solid var(--line);color:var(--muted)}
+.chip.pitt{background:var(--pitt-soft);color:var(--pitt-text);border-color:transparent}
+.chip.cmu{background:var(--cmu-soft);color:var(--cmu-text);border-color:transparent}
+.row-go{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.row-go em{font-style:normal;font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+
+.pairbars{display:flex;flex-direction:column;gap:16px}
+.pb h4{margin:0 0 6px;font-size:13px;font-weight:600;display:flex;justify-content:space-between;gap:10px}
+.pb h4 small{font-family:var(--f-mono);font-weight:400;font-size:10.5px;color:var(--muted)}
+.pb-row{display:grid;grid-template-columns:44px minmax(0,1fr) 92px;gap:8px;align-items:center;font-size:12.5px;margin-top:4px}
+.pb-row .who{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.pb-track{height:14px;background:color-mix(in srgb,var(--line) 60%,transparent);display:flex}
+.pb-track i{display:block;height:100%}
+.pb-track i.p{background:var(--pitt)} .pb-track i.p2{background:color-mix(in srgb,var(--pitt) 45%,transparent)}
+.pb-track i.c{background:var(--cmu)} .pb-track i.c2{background:color-mix(in srgb,var(--cmu) 45%,transparent)}
+.pb-row .n{font-family:var(--f-mono);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.pb-note{font-size:11.5px;color:var(--muted);margin-top:5px}
+.keyline{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.keyline i{display:inline-block;width:10px;height:10px;margin-right:5px;vertical-align:-1px}
+
+.detail{border:1px solid var(--line);border-top:3px solid var(--ink);padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.detail.pitt{border-top-color:var(--pitt)} .detail.cmu{border-top-color:var(--cmu)}
+.detail-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.detail-name{font-family:var(--f-display);font-size:24px;font-weight:700;text-transform:uppercase;line-height:1.05}
+.detail p{font-size:14px}
+.detail .meta{font-family:var(--f-mono);font-size:11.5px;color:var(--muted)}
+
+.sources{font-size:11.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px;line-height:1.5}
+.sources a{color:var(--muted)}
+.pager{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding:10px max(26px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(26px,env(safe-area-inset-left,0px))}
+.pager button{background:none;border:1px solid var(--line);border-radius:3px;padding:7px 14px;cursor:pointer;font-size:13px;font-weight:500}
+.pager button:disabled{opacity:.4;cursor:default}
+.pager .next{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--on-accent)}
+.pager-count{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);align-self:center}
+
+@media (max-width:900px){
+  body{overflow:auto}
+  .app{display:flex;flex-direction:column;height:auto}
+  .stage{height:56svh;min-height:330px;flex:none}
+  .panel{border-left:0;border-top:1px solid var(--line)}
+  .chapter-wrap{overflow:visible}
+  .chapters{position:sticky;top:0;z-index:5;background:var(--surface);padding-top:0}
+  .chapters button{font-size:13px;letter-spacing:.04em;padding:12px 6px 10px}
+  .chapter{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .pager{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .brand-text small,.stage-foot span.opt,.legend{display:none}
+  .tool .t-label{display:none}
+}
+@media (max-width:420px){
+  .fig-n{font-size:30px}
+  .versus{grid-template-columns:minmax(0,.7fr) minmax(0,1fr) minmax(0,1fr)}
+  .pb-row{grid-template-columns:40px minmax(0,1fr) 80px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<style>[hidden]{display:none!important}body{margin:0}</style>
+</head>
+<body>
+<div class="app">
+  <section class="stage" id="stage" aria-label="Interactive 3D model of Oakland, Pittsburgh, with the Pitt and CMU campuses">
+    <canvas id="gl" aria-label="Drag to orbit, scroll or pinch to zoom"></canvas>
+    <div class="pins" id="pins"></div>
+    <div class="tip" id="tip" hidden></div>
+    <div class="stage-top">
+      <div class="brand"><div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></div><div class="brand-text">Oakland Campus Atlas<small>Pittsburgh, Pennsylvania</small></div></div>
+      <div class="stage-tools">
+        <button class="tool" id="spin" aria-pressed="false" title="Slowly orbit the view"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5c1.8 0 3.3.8 4.3 2.1"/><path d="M12.6 1.6v3.2H9.4"/></svg><span class="t-label">Orbit</span></button>
+        <button class="tool" id="reset" title="Return to this chapter's view"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 8h12M8 2v12"/><circle cx="8" cy="8" r="3"/></svg><span class="t-label">Reset view</span></button>
+      </div>
+    </div>
+    <div class="legend" aria-hidden="true"><span><i style="background:var(--pitt)"></i>University of Pittsburgh</span><span><i style="background:var(--cmu)"></i>Carnegie Mellon</span><span><i style="background:var(--neutral-soft);border:1px solid var(--line)"></i>Other buildings</span></div>
+    <button class="compass" id="compass" title="Face north" aria-label="Rotate the view to face north"><svg viewBox="0 0 40 40" id="compass-svg"><path d="M20 4 L25 20 L20 17 L15 20 Z" fill="var(--ink)"/><path d="M20 36 L15 20 L20 23 L25 20 Z" fill="var(--line)"/><text x="20" y="13.5" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="6.5" fill="var(--surface)" font-weight="500">N</text></svg></button>
+    <div class="stage-foot"><span><b>40.4435° N, 79.9500° W</b></span><span>Map data <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></span><span class="opt" id="model-count">4,116 buildings</span></div>
+    <div class="loader" id="loader"><div class="loader-box"><div class="loader-label"><span>Building Oakland in 3D</span><span id="load-pct">0%</span></div><div class="loader-bar"><i id="load-bar"></i></div></div></div>
+  </section>
+
+  <aside class="panel">
+    <nav class="chapters" role="tablist" aria-label="Chapters" id="tabs">
+      <button role="tab" data-ch="overview" aria-selected="true">Overview</button>
+      <button role="tab" data-ch="location" aria-selected="false">Location</button>
+      <button role="tab" data-ch="timeline" aria-selected="false">History</button>
+      <button role="tab" data-ch="numbers" aria-selected="false">Numbers</button>
+      <button role="tab" data-ch="buildings" aria-selected="false">Buildings</button>
+    </nav>
+    <div class="chapter-wrap" id="chapter-wrap">
+
+      <article class="chapter" data-chapter="overview" role="tabpanel">
+        <div class="eyebrow">Oakland · Pittsburgh, Pennsylvania</div>
+        <h1><span class="p">Pitt</span> &amp; <span class="c">Carnegie Mellon</span></h1>
+        <p class="lead">Two research universities share one neighborhood. Pitt is a state-related university chartered in 1787. Carnegie Mellon is a private university Andrew Carnegie founded in 1900. Their campuses meet at Schenley Park, with the Carnegie Museums and Library between them.</p>
+        <div class="figures">
+          <div><span class="fig-n p">31,237</span><span class="fig-l">Pitt students, Pittsburgh campus, Fall 2025</span></div>
+          <div><span class="fig-n c">14,744</span><span class="fig-l">CMU students, Pittsburgh campus, Fall 2024</span></div>
+          <div><span class="fig-n">163 m</span><span class="fig-l">Cathedral of Learning, 42 stories</span></div>
+        </div>
+        <div class="versus" role="table" aria-label="Pitt and CMU at a glance">
+          <div class="vk" role="columnheader"></div><div class="vh p" role="columnheader">Pitt</div><div class="vh c" role="columnheader">CMU</div>
+          <div class="k">Founded</div><div><b>1787</b><small>Pittsburgh Academy</small></div><div><b>1900</b><small>Carnegie Technical Schools</small></div>
+          <div class="k">Type</div><div>State-related public</div><div>Private</div>
+          <div class="k">Leader</div><div>Chancellor Joan Gabel</div><div>President Farnam Jahanian</div>
+          <div class="k">Athletics</div><div>Panthers · NCAA Div. I, ACC</div><div>Tartans · NCAA Div. III, UAA</div>
+          <div class="k">Colors</div><div>Royal blue and gold</div><div>Carnegie red, black and gray</div>
+          <div class="k">AAU member</div><div>Since 1974</div><div>Since 1982</div>
+        </div>
+        <div class="hint"><span>Drag the model to orbit · scroll or pinch to zoom · hover a building for its name</span><span><kbd>←</kbd> <kbd>→</kbd> change chapters</span></div>
+        <div class="sources">Sources: <a href="https://www.ir.pitt.edu/sites/default/files/2026-09/2025-2026%20Pittsburgh%20Common%20Data%20Set.pdf" target="_blank" rel="noopener">Pitt Common Data Set 2025–26</a> · <a href="https://www.cmu.edu/ira/2024-info-at-a-glance.pdf" target="_blank" rel="noopener">CMU Info at a Glance 2024</a> · <a href="https://en.wikipedia.org/wiki/Cathedral_of_Learning" target="_blank" rel="noopener">Cathedral of Learning</a> · <a href="https://en.wikipedia.org/wiki/University_of_Pittsburgh" target="_blank" rel="noopener">University of Pittsburgh</a> · <a href="https://www.cmu.edu/about/history.html" target="_blank" rel="noopener">CMU history</a> · <a href="https://the-tartan.org/2026/03/30/president-jahanian-delivers-state-of-university-address/" target="_blank" rel="noopener">The Tartan, Mar 2026</a> · <a href="https://en.wikipedia.org/wiki/Association_of_American_Universities" target="_blank" rel="noopener">AAU</a>. CMU's Fall 2025 total of 16,582 includes its Qatar and Silicon Valley campuses.</div>
+      </article>
+
+      <article class="chapter" data-chapter="location" role="tabpanel" hidden>
+        <div class="eyebrow">01 · Location</div>
+        <h2>Neighbors across Schenley Park</h2>
+        <p class="lead">Oakland is Pittsburgh's university district, about 2.5 miles east of Downtown along Forbes and Fifth Avenues. Pitt fills the west side around the Cathedral of Learning. CMU sits to the east on the edge of Schenley Park. The Carnegie Institute complex, opened in 1895, stands between them.</p>
+        <div class="facts">
+          <div><span class="k">Pitt campus</span><span class="v">≈ 132 acres</span></div>
+          <div><span class="k">CMU campus</span><span class="v">140–157 acres (sources differ)</span></div>
+          <div><span class="k">Schenley Park</span><span class="v">456 acres, created 1889</span></div>
+          <div><span class="k">Cathedral to CMU's Hamerschlag Hall</span><span class="v" id="dist-cl">≈ 0.9 km</span></div>
+          <div><span class="k">Main streets</span><span class="v">Forbes Ave. and Fifth Ave.</span></div>
+          <div><span class="k">To Downtown</span><span class="v">≈ 4 km (2.5 mi) west</span></div>
+        </div>
+        <div class="sources">Distances are measured on the model. Sources: <a href="https://en.wikipedia.org/wiki/Oakland_(Pittsburgh)" target="_blank" rel="noopener">Oakland (Pittsburgh)</a> · <a href="https://en.wikipedia.org/wiki/Schenley_Park" target="_blank" rel="noopener">Schenley Park</a> · <a href="https://en.wikipedia.org/wiki/Carnegie_Museums_of_Pittsburgh" target="_blank" rel="noopener">Carnegie Museums</a> · <a href="https://en.wikipedia.org/wiki/University_of_Pittsburgh" target="_blank" rel="noopener">Pitt (acreage)</a> · <a href="https://en.wikipedia.org/wiki/Carnegie_Mellon_University" target="_blank" rel="noopener">CMU (acreage)</a></div>
+      </article>
+
+      <article class="chapter" data-chapter="timeline" role="tabpanel" hidden>
+        <div class="eyebrow">02 · History</div>
+        <h2>Two founders, one neighborhood</h2>
+        <p class="lead">Pitt is 113 years older, but both campuses took their present shape in Oakland in the early 1900s. Pick an event to fly to its building.</p>
+        <div class="filter" id="tl-filter" role="group" aria-label="Show events for">
+          <button data-f="all" aria-pressed="true">Both</button><button data-f="pitt" aria-pressed="false">Pitt</button><button data-f="cmu" aria-pressed="false">CMU</button>
+        </div>
+        <div class="list" id="timeline-list"></div>
+        <div class="sources">Sources: <a href="https://en.wikipedia.org/wiki/University_of_Pittsburgh" target="_blank" rel="noopener">University of Pittsburgh</a> · <a href="https://www.cmu.edu/about/history.html" target="_blank" rel="noopener">CMU history</a> · <a href="https://www.cmu.edu/ira/factbook/pdf/facts2016/history-and-organization.pdf" target="_blank" rel="noopener">CMU Factbook</a> · <a href="https://en.wikipedia.org/wiki/Cathedral_of_Learning" target="_blank" rel="noopener">Cathedral of Learning</a> · <a href="https://en.wikipedia.org/wiki/Heinz_Memorial_Chapel" target="_blank" rel="noopener">Heinz Chapel</a> · <a href="https://www.library.cmu.edu/history" target="_blank" rel="noopener">CMU Libraries</a> · <a href="https://www.cmu.edu/news/stories/archives/2018/september/tepper-quad-opening.html" target="_blank" rel="noopener">Tepper Quad</a> · <a href="https://www.pittwire.pitt.edu/features-articles/2025/09/16/recreation-wellness-center-student-health" target="_blank" rel="noopener">Pittwire 2025</a> · <a href="https://www.cmu.edu/news/stories/archives/2026/july/carnegie-mellons-richard-king-mellon-hall-of-sciences-enters-new-phase-of-construction" target="_blank" rel="noopener">CMU News, July 2026</a>. CMU's own history page dates the School of Computer Science to 1986; the 2016 Factbook says 1988.</div>
+      </article>
+
+      <article class="chapter" data-chapter="numbers" role="tabpanel" hidden>
+        <div class="eyebrow">03 · By the numbers</div>
+        <h2>Big public, small private</h2>
+        <p class="lead">Pitt enrolls about twice as many students. CMU has far fewer students per faculty member and more than half of its students are in graduate programs.</p>
+        <div class="keyline"><span><i style="background:var(--pitt)"></i>Pitt</span><span><i style="background:var(--cmu)"></i>CMU</span><span><i style="background:color-mix(in srgb,var(--muted) 45%,transparent)"></i>lighter shade = graduate students</span></div>
+        <div class="pairbars" id="pairbars"></div>
+        <div class="versus" role="table" aria-label="More comparisons">
+          <div class="vk"></div><div class="vh p">Pitt</div><div class="vh c">CMU</div>
+          <div class="k">Schools and colleges</div><div><b>17</b></div><div><b>7</b></div>
+          <div class="k">International students</div><div><b>2,711</b><small>Fall 2025</small></div><div><b>7,430</b><small>Fall 2024, all campuses</small></div>
+          <div class="k">Research</div><div><b>$1.25B</b><small>sponsored research, FY2025</small></div><div><b>+6.5%</b><small>sponsored research growth, FY2025</small></div>
+          <div class="k">Honors</div><div><b>82</b><small>National Academy members</small></div><div><b>21 Nobel · 13 Turing</b><small>laureates affiliated with CMU</small></div>
+        </div>
+        <div class="sources">Sources: <a href="https://www.ir.pitt.edu/sites/default/files/2026-09/2025-2026%20Pittsburgh%20Common%20Data%20Set.pdf" target="_blank" rel="noopener">Pitt CDS 2025–26</a> · <a href="https://www.cmu.edu/ira/2024-info-at-a-glance.pdf" target="_blank" rel="noopener">CMU 2024 at a Glance</a> · <a href="https://www.cmu.edu/ira/CDS/pdf/cds_2025_26/cds-2025-b-enrollment-and-persistence.pdf" target="_blank" rel="noopener">CMU CDS 2025 (enrollment)</a> · <a href="https://www.cmu.edu/ira/CDS/pdf/cds_2025_26/cds_2025_i_instructional_faculty_and_class_size.pdf" target="_blank" rel="noopener">CMU CDS 2025 (faculty)</a> · <a href="https://www.financeoperations.pitt.edu/sites/default/files/assets/ESG_report_2026-final.pdf" target="_blank" rel="noopener">Pitt endowment</a> · <a href="https://www.cmu.edu/annual-report-2025/cio/index.html" target="_blank" rel="noopener">CMU endowment</a> · <a href="https://www.research.pitt.edu/report/research-numbers" target="_blank" rel="noopener">Pitt research</a> · <a href="https://www.cmu.edu/annual-report-2025/cfo/index.html" target="_blank" rel="noopener">CMU research</a> · <a href="https://pittnews.com/article/201361/news/pitt-decrease-in-international-student-enrollment-contrasts-national-average/amp/" target="_blank" rel="noopener">Pitt News</a> · <a href="https://www.pitt.edu/about" target="_blank" rel="noopener">Pitt about</a> · <a href="https://www.cmu.edu/about/awards.html" target="_blank" rel="noopener">CMU awards</a>. CMU publishes no FY2025 research total. Pitt's school count is from Wikipedia.</div>
+      </article>
+
+      <article class="chapter" data-chapter="buildings" role="tabpanel" hidden>
+        <div class="eyebrow">04 · Buildings</div>
+        <h2>Landmarks on the model</h2>
+        <p class="lead">Pick a building to fly to it. Hover the model to read any building's name from OpenStreetMap.</p>
+        <div class="detail" id="detail"></div>
+        <div class="filter" id="b-filter" role="group" aria-label="Show buildings for">
+          <button data-f="all" aria-pressed="true">All</button><button data-f="pitt" aria-pressed="false">Pitt</button><button data-f="cmu" aria-pressed="false">CMU</button><button data-f="other" aria-pressed="false">Neighbors</button>
+        </div>
+        <div class="list" id="building-list"></div>
+        <div class="sources">Building shapes and many heights come from OpenStreetMap. Where OpenStreetMap has no height, the model estimates one from the floor count or building type, so some buildings are drawn shorter or taller than they are. Colors follow the campus boundaries and owner tags in OpenStreetMap. Sources: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors (ODbL)</a> · <a href="https://en.wikipedia.org/wiki/Hillman_Library" target="_blank" rel="noopener">Hillman Library</a> · <a href="https://en.wikipedia.org/wiki/Petersen_Events_Center" target="_blank" rel="noopener">Petersen Events Center</a> · <a href="https://en.wikipedia.org/wiki/Wesley_W._Posvar_Hall" target="_blank" rel="noopener">Posvar Hall</a> · <a href="https://en.wikipedia.org/wiki/Litchfield_Towers" target="_blank" rel="noopener">Litchfield Towers</a> · <a href="https://en.wikipedia.org/wiki/Mellon_Institute_of_Industrial_Research" target="_blank" rel="noopener">Mellon Institute</a> · <a href="https://sah-archipedia.org/node/17018" target="_blank" rel="noopener">SAH Archipedia</a> · <a href="https://www.asumag.com/dailynews/article/20843998/new-computer-science-facilities-dedicated-at-carnegie-mellon-university" target="_blank" rel="noopener">Gates-Hillman</a> · <a href="https://www.tradelineinc.com/news/2024-9/carnegie-mellon-university-opens-highmark-center-health-wellness-and-athletics" target="_blank" rel="noopener">Highmark Center</a></div>
+      </article>
+    </div>
+    <div class="pager">
+      <button id="prev">← Back</button>
+      <span class="pager-count" id="pager-count">1 / 5</span>
+      <button id="next" class="next">Next →</button>
+    </div>
+  </aside>
+</div>
+<script>
+(function(){
+  function say(msg){ var l=document.querySelector('.loader-label'); if(l && !window.__atlasReady){ l.textContent=''; var sp=document.createElement('span'); sp.textContent=msg; l.appendChild(sp); } }
+  window.addEventListener('error', function(e){ say('The 3D model could not load: ' + (e.message || 'script error')); });
+  window.addEventListener('unhandledrejection', function(e){ say('The 3D model could not load: ' + ((e.reason && e.reason.message) || e.reason)); });
+  setTimeout(function(){ if(!window.__atlasStarted) say('The page script did not start. Reload the page to try again.'); }, 15000);
+})();
+</script>
+<script src="oakland-app.js"></script>
+
+</body>
+</html>
