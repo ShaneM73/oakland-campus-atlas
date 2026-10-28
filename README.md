@@ -21,3 +21,7 @@ Opening `index.html` by double-clicking will not load the map data.
 1. Create a new, empty public repository (no README) and upload these files, or add this folder in GitHub Desktop and publish it.
 2. Settings > Pages > Deploy from a branch > `main`, `/ (root)` > Save.
 3. The site appears at `https://<your-username>.github.io/<repository-name>/` — this copy is live at https://shanem73.github.io/oakland-campus-atlas/.
+
+## License
+
+Code is released under the [MIT License](LICENSE). Map data in `oakland.json` is © OpenStreetMap contributors under the [Open Database License](https://www.openstreetmap.org/copyright), which is separate from the code license.
